@@ -1,0 +1,12 @@
+{
+  "port": 8080,
+  "dataGoKrKey": "여기에 공공데이터포털 인증키",
+  "rone": {
+    "key": "여기에 한국부동산원 R-ONE 인증키",
+    "clsId": 50045,
+    "clsName": "용산구",
+    "tradeStatblId": "T244183132827305",
+    "jeonseStatblId": "T247713133046872",
+    "note": "한국부동산원 R-ONE 주간 아파트 매매·전세가격지수 (용산구 CLS_ID 50045)"
+  }
+}
