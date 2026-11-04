@@ -104,7 +104,25 @@ dialog input,dialog select{width:100%}
 .empty{color:var(--todo);font-size:14px;padding:16px 0;text-align:center}
 .loading{opacity:.5;pointer-events:none}
 footer{margin-top:32px;font-size:12.5px;color:var(--sub);border-top:1px solid var(--line);padding-top:14px}
-@media print{body{background:#fff}.ctl,.btn,.mapwrap,.del,.add-card{display:none!important}.card{break-inside:avoid}}
+.printonly{display:none}
+@media print{
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{background:#fff}
+  .wrap{max-width:none;padding:0}
+  .ctl,.btn,.del,.add-card,.pill,#msg,.noprint{display:none!important}
+  .printonly{display:block!important}
+  .card{break-inside:avoid;box-shadow:none}
+  h2{break-after:avoid}
+  .split{grid-template-columns:1fr}
+  .mapwrap{position:static}
+  #map{height:380px}
+  .sel-box{break-inside:avoid}
+  body.print-site .sec-all{display:none!important}
+  .leaflet-control-zoom{display:none}
+}
+.mk.sta{background:#6a1b9a;border-radius:6px;width:auto;min-width:22px;height:22px;padding:0 5px;font-size:11px;white-space:nowrap}
+.mk.bus{background:#2e7d32;width:16px;height:16px;font-size:9px;border-width:1px}
+.lbl{background:rgba(255,255,255,.92);border:1px solid #999;border-radius:4px;padding:0 4px;font-size:11px;color:#222;box-shadow:none}
 </style>
 </head>
 <body>
@@ -128,6 +146,7 @@ footer{margin-top:32px;font-size:12.5px;color:var(--sub);border-top:1px solid va
 </div>
 
 <h1>서울 용산구 부동산 대시보드</h1>
+<div class="printonly meta" id="printInfo"></div>
 <div class="meta" id="meta">국토교통부 아파트 실거래가 기준 · 신고 지연으로 최근 2~4주 거래는 이후 증가할 수 있습니다.</div>
 
 <div class="ctl">
@@ -141,7 +160,7 @@ footer{margin-top:32px;font-size:12.5px;color:var(--sub);border-top:1px solid va
     <span class="chips" style="margin-left:6px">
       <button class="btn" data-p="28">최근 4주</button><button class="btn" data-p="90">3개월</button><button class="btn" data-p="180">6개월</button><button class="btn" data-p="365">1년</button>
     </span>
-    <button class="btn" onclick="window.print()" style="margin-left:auto">인쇄/PDF</button>
+    <button class="btn p" id="printAll" style="margin-left:auto">🖨 전체 브리핑 인쇄</button>
   </div>
 </div>
 
@@ -172,7 +191,7 @@ footer{margin-top:32px;font-size:12.5px;color:var(--sub);border-top:1px solid va
     <ol class="rank" id="rank"></ol>
     <div class="sel-box" id="selbox" hidden></div>
   </div>
-  <div class="mapwrap"><div id="map"></div><div class="note" style="margin-top:6px">지도 © OpenStreetMap contributors · 위치는 자동 검색값으로 실제와 다소 차이가 있을 수 있습니다.</div></div>
+  <div class="mapwrap"><div id="map"></div><div class="note" style="margin-top:6px"><span style="color:#6a1b9a">■</span> 지하철역(직선거리) · <span style="color:#2e7d32">●</span> 버스정류장 · 점선 원 500m<br>지도 © OpenStreetMap contributors · 위치는 자동 검색값으로 실제와 다소 차이가 있을 수 있습니다.</div></div>
 </div>
 
 <h2>추천 매물 <small>카드를 클릭하면 입지분석이 펼쳐집니다 · 샘플 4건은 예시이며 실제 매물이 아닙니다</small></h2>
@@ -222,10 +241,18 @@ const SAMPLES = [
   { id: "s1", sample: true, apt: "한강대우", dong: "이촌동", type: "trade", area: 134.13, price: "320000", memo: "한강변 대형 평형 (샘플)" },
   { id: "s2", sample: true, apt: "용산파크e-편한세상", dong: "한강로2가", type: "jeonse", area: 84, price: "100000", memo: "용산역 도보권 (샘플)" },
   { id: "s3", sample: true, apt: "한남더힐", dong: "한남동", type: "wolse", area: 233, price: "30000/1000", memo: "고급 임대 (샘플)" },
-  { id: "s4", sample: true, apt: "이촌코오롱", dong: "이촌동", type: "trade", area: 59.82, price: "160000", memo: "소형 실거주 (샘플)" }
+  { id: "s4", sample: true, apt: "이촌코오롱", dong: "이촌동", type: "trade", area: 59.82, price: "160000", memo: "소형 실거주 (샘플)" },
+  { id: "s5", sample: true, apt: "현대한강", dong: "이촌동", type: "trade", area: 84.9, price: "250000", memo: "한강변 이촌동 (샘플)" },
+  { id: "s6", sample: true, apt: "동아그린", dong: "이촌동", type: "wolse", area: 84.82, price: "20000/300", memo: "이촌역 인근 (샘플)" }
 ];
 let LIST = [];
 try { LIST = JSON.parse(localStorage.getItem("ys_listings") || "null") || SAMPLES.slice(); } catch { LIST = SAMPLES.slice(); }
+// 새로 추가된 샘플은 기존 저장 목록에도 한 번만 합쳐 줌 (사용자가 지운 샘플은 다시 안 나옴)
+try {
+  const seen = JSON.parse(localStorage.getItem("ys_seen_samples") || "null") || ["s1", "s2", "s3", "s4"];
+  SAMPLES.filter(x => !seen.includes(x.id)).forEach(x => { if (!LIST.some(l => l.id === x.id)) LIST.push({ ...x }); });
+  localStorage.setItem("ys_seen_samples", JSON.stringify(SAMPLES.map(x => x.id))); localStorage.setItem("ys_listings", JSON.stringify(LIST));
+} catch {}
 const saveList = () => { try { localStorage.setItem("ys_listings", JSON.stringify(LIST)); } catch {} };
 const priceLabel = l => l.type === "wolse" ? (() => { const [d, m] = String(l.price).split("/").map(Number); return `보증금 ${won(d || 0)} / 월 ${(m || 0).toLocaleString()}만`; })() : won(Number(String(l.price).replace(/,/g, "")) || 0);
 
@@ -394,12 +421,13 @@ function renderRank() {
 }
 
 /* ---------- 지도 ---------- */
-let map, layer;
+let map, layer, poiLayer;
 function initMap() {
   if (!window.L) { $("map").innerHTML = `<div class="empty">지도 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하세요.</div>`; return; }
   map = L.map("map", { scrollWheelZoom: false, minZoom: 11, maxZoom: 18 }).setView([37.5326, 126.9906], 13);
   L.tileLayer("/tile/{z}/{x}/{y}.png", { minZoom: 11, maxZoom: 18, attribution: "© OpenStreetMap contributors" }).addTo(map);
   layer = L.layerGroup().addTo(map);
+  poiLayer = L.layerGroup().addTo(map);
   map.on("click", () => map.scrollWheelZoom.enable());
 }
 async function geoOf(a) {
@@ -432,6 +460,40 @@ async function renderMarkers() {
   else if (pts.length) map.fitBounds(pts, { padding: [30, 30], maxZoom: 15 });
 }
 
+/* ---------- 지도: 전철역·버스정류장 ---------- */
+function drawPoi(geo, p) {
+  if (!map || !poiLayer) return;
+  poiLayer.clearLayers();
+  const home = [geo.lat, geo.lng];
+  L.circle(home, { radius: 500, color: "#6a1b9a", weight: 1, dashArray: "4 4", fill: false }).addTo(poiLayer);
+  const pts = [home];
+  (p.bus || []).filter(b => b.lat).forEach(b => {
+    L.marker([b.lat, b.lng], { icon: L.divIcon({ className: "", html: `<div class="mk bus">B</div>`, iconSize: [16, 16], iconAnchor: [8, 8] }) })
+      .bindTooltip(`${esc(b.name)} · ${dm(b.dist)}`).addTo(poiLayer);
+    pts.push([b.lat, b.lng]);
+  });
+  (p.subway || []).filter(x => x.lat).forEach((x, i) => {
+    const pos = [x.lat, x.lng];
+    L.polyline([home, pos], { color: "#6a1b9a", weight: 2, dashArray: "6 6", opacity: .8 }).addTo(poiLayer);
+    L.marker(pos, { icon: L.divIcon({ className: "", html: `<div class="mk sta">🚇 ${esc(x.name)}역 ${dm(x.dist)}</div>`, iconSize: [10, 22], iconAnchor: [0, 11] }) }).addTo(poiLayer);
+    if (i < 2) pts.push(pos);
+  });
+  map.invalidateSize();
+  map.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
+}
+
+/* ---------- 인쇄 ---------- */
+function printReport(siteOnly) {
+  if (siteOnly && !S.sel) { alert("TOP10 단지나 추천 매물을 먼저 선택해 주세요."); return; }
+  const d = new Date();
+  $("printInfo").textContent = `출력일 ${ymd(d)} · 조회기간 ${S.from} ~ ${S.to} · ${S.dong || "용산구 전체"}${siteOnly ? " · " + S.sel.apt + " 입지분석 리포트" : ""} · 한아름부동산 ☎ 02-703-7070`;
+  document.body.classList.toggle("print-site", !!siteOnly);
+  if (map) map.invalidateSize();
+  setTimeout(() => window.print(), 700);
+}
+window.addEventListener("afterprint", () => { document.body.classList.remove("print-site"); if (map) map.invalidateSize(); });
+$("printAll").onclick = () => printReport(false);
+
 /* ---------- 선택 + 입지분석 ---------- */
 const DEV = [
   { name: "용산국제업무지구 (용산정비창)", lat: 37.5300, lng: 126.9655, st: "warn", stl: "재확인 필요", d: "코레일 정비창 약 49.5만㎡ 복합개발. 2026년 자금난 보도가 있어 최신 공식 발표 확인이 필요합니다." },
@@ -446,14 +508,15 @@ const walk = m => `도보 ${Math.max(1, Math.round(m / 80))}분`;
 
 async function selectApt(a, src) {
   const s = { apt: a.apt, dong: a.dong, jibun: a.jibun || "", src };
-  S.sel = s;
+  S.sel = s; if (poiLayer) poiLayer.clearLayers();
   document.querySelectorAll("#rank li[data-i]").forEach(li => li.setAttribute("aria-selected", !!TOP[li.dataset.i] && keyOf(TOP[li.dataset.i]) === keyOf(s)));
   const box = $("selbox"); box.hidden = false;
   const recent = [...S.trade.map(d => ({ ...d, k: "매매" })), ...S.rent.map(d => ({ ...d, k: d.monthly ? "월세" : "전세" }))].filter(d => d.apt === a.apt && d.dong === a.dong).sort((p, q) => q.date.localeCompare(p.date)).slice(0, 6);
   box.innerHTML = `<b>${esc(a.apt)}</b> <span class="note">${esc(a.dong)} · 최근 실거래</span>` +
     (recent.length ? `<table>${recent.map(d => `<tr><td>${d.date.slice(5)}</td><td>${d.k}</td><td class="n">${d.area}㎡ ${d.floor}층</td><td class="n"><b>${d.k === "매매" ? won(d.price) : d.k === "전세" ? won(d.deposit) : won(d.deposit) + " / " + d.monthly + "만"}</b></td></tr>`).join("")}</table>` : `<div class="note">선택한 기간에 거래가 없습니다.</div>`) +
-    `<div class="row"><button class="btn p" id="goSite">입지분석 보기 ↓</button></div>`;
+    `<div class="row"><button class="btn p" id="goSite">입지분석 보기 ↓</button> <button class="btn" id="printSite">🖨 이 단지 리포트 인쇄</button></div>`;
   $("goSite").onclick = () => $("siteT").scrollIntoView({ behavior: "smooth" });
+  $("printSite").onclick = () => printReport(true);
   renderMarkers();
   renderSite(s);
 }
@@ -467,6 +530,7 @@ async function renderSite(a) {
   try { p = await api(`/api/poi?lat=${geo.lat}&lng=${geo.lng}`); }
   catch (e) { if (S.sel === a) $("site").innerHTML = `<div class="err">입지 정보를 불러오지 못했습니다(${esc(e.message)}). 잠시 후 다시 선택해 주세요.</div>`; return; }
   if (S.sel !== a) return;
+  drawPoi(geo, p);
   const ul = (arr, fmt) => arr.length ? `<ul>${arr.map(fmt).join("")}</ul>` : `<div class="note">반경 내 정보 없음</div>`;
   const row = x => `<li><span>${esc(x.name)}</span><span>${dm(x.dist)} · ${walk(x.dist)}</span></li>`;
   const dev = DEV.map(d => ({ ...d, dist: hav(geo.lat, geo.lng, d.lat, d.lng) })).sort((x, y) => x.dist - y.dist);
@@ -544,6 +608,11 @@ $("apply").onclick = () => {
   S.from = $("from").value; S.to = $("to").value; load();
 };
 
+(() => { const hs = document.querySelectorAll("h2"); [0, 1, 2, 4].forEach(i => hs[i].classList.add("sec-all"));
+  ["kpis", "charts", "listings"].forEach(id => $(id).classList.add("sec-all"));
+  document.querySelector(".grid.g2").classList.add("sec-all");
+  document.querySelector("#tabs").closest(".row").classList.add("sec-all");
+  $("rank").classList.add("sec-all"); })();
 S.to = ymd(new Date()); S.from = addDays(S.to, -90);
 $("from").value = S.from; $("to").value = S.to;
 initMap(); renderListings(); loadRone(); load();

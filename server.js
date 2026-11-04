@@ -130,7 +130,7 @@ function classify(els, lat, lng) {
   for (const e of els) {
     const t = e.tags || {}, name = t["name:ko"] || t.name; if (!name) continue;
     const la = e.lat ?? e.center?.lat, lo = e.lon ?? e.center?.lon; if (la == null) continue;
-    const d = dist(lat, lng, la, lo), item = { name, dist: d };
+    const d = dist(lat, lng, la, lo), item = { name, dist: d, lat: la, lng: lo };
     const k = (n, c) => { const id = n + "|" + c; if (seen.has(id)) return false; seen.add(id); return true; };
     if ((t.railway === "station" || t.station === "subway") && t.railway !== "halt") { if (k(name, "s")) out.subway.push({ ...item, line: t.line || t.network || "" }); }
     else if (t.highway === "bus_stop") { if (k(name, "b")) out.bus.push(item); }
@@ -146,7 +146,7 @@ function classify(els, lat, lng) {
   }
   const by = (a, n) => a.sort((x, y) => x.dist - y.dist).slice(0, n);
   return {
-    subway: by(out.subway, 4), busCount: out.bus.length, bus: by(out.bus, 5),
+    subway: by(out.subway, 4), busCount: out.bus.length, bus: by(out.bus, 8),
     school: { 초등: by(out.school.초등, 3), 중등: by(out.school.중등, 3), 고등: by(out.school.고등, 3) },
     mart: by(out.mart, 3), dept: by(out.dept, 3), cafeCount: out.cafe.length, cafe: by(out.cafe, 4),
     gov: by(out.gov, 3), hospital: by(out.hospital, 3),
@@ -154,7 +154,7 @@ function classify(els, lat, lng) {
   };
 }
 async function poi(lat, lng) {
-  const key = lat.toFixed(4) + "," + lng.toFixed(4);
+  const key = "v2:" + lat.toFixed(4) + "," + lng.toFixed(4); // v2: 좌표 포함
   if (poiCache[key]) return poiCache[key];
   let els, err;
   for (let i = 0; i < 2 && !els; i++) { try { els = await overpass(lat, lng); } catch (e) { err = e; await sleep(1500); } }
