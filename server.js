@@ -172,12 +172,30 @@ async function roneSeries(id) {
   const rows = (j.SttsApiTblData || []).find(x => x.row)?.row || [];
   return rows.map(r => ({ t: r.WRTTIME_DESC, v: Number(r.DTA_VAL) })).filter(r => r.v).sort((x, y) => x.t.localeCompare(y.t)).slice(-110);
 }
+async function roneRows(id, cy, cls, itm) {
+  const c = cfg.rone;
+  const url = `https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do?KEY=${encodeURIComponent(c.key)}&Type=json&STATBL_ID=${id}&DTACYCLE_CD=${cy}&CLS_ID=${cls}&pIndex=1&pSize=1000`;
+  const j = await (await fetch(url, { headers: { "User-Agent": UA } })).json();
+  if (j.RESULT) throw new Error(j.RESULT.MESSAGE);
+  const rows = (j.SttsApiTblData || []).find(x => x.row)?.row || [];
+  return rows.filter(r => !itm || r.ITM_NM === itm).map(r => ({ t: r.WRTTIME_DESC || String(r.WRTTIME_IDTFR_ID), k: String(r.WRTTIME_IDTFR_ID), v: Number(r.DTA_VAL) })).filter(r => Number.isFinite(r.v)).sort((x, y) => x.k.localeCompare(y.k));
+}
+const safe = p => p.catch(() => []);
 async function rone() {
   const c = cfg.rone || {};
   if (!c.key) return { enabled: false };
   if (roneCache && Date.now() - roneCache.at < 6 * 3600e3) return roneCache.data;
-  const [trade, jeonse] = await Promise.all([roneSeries(c.tradeStatblId), roneSeries(c.jeonseStatblId)]);
-  const data = { enabled: true, name: c.clsName, trade, jeonse };
+  const [trade, jeonse, unsoldY, unsoldS, volume, dTrade, dTradeS, dJeonse, dJeonseS] = await Promise.all([
+    roneSeries(c.tradeStatblId), roneSeries(c.jeonseStatblId),
+    safe(roneRows("T237973129847263", "MM", 50023, "미분양현황")), safe(roneRows("T237973129847263", "MM", 50018, "미분양현황")),
+    safe(roneRows("A_2024_00554", "MM", 510005, "동(호)수")),
+    safe(roneRows("T248163133074619", "WK", 50010)), safe(roneRows("T248163133074619", "WK", 50008)),
+    safe(roneRows("T245423133086632", "WK", 50010)), safe(roneRows("T245423133086632", "WK", 50008))
+  ]);
+  const data = { enabled: true, name: c.clsName, trade, jeonse,
+    unsold: { yongsan: unsoldY.slice(-24), seoul: unsoldS.slice(-24) },
+    volume: volume.slice(-24),
+    demand: { trade: dTrade.slice(-52), tradeSeoul: dTradeS.slice(-52), jeonse: dJeonse.slice(-52), jeonseSeoul: dJeonseS.slice(-52) } };
   roneCache = { at: Date.now(), data };
   return data;
 }
@@ -230,9 +248,9 @@ http.createServer(async (req, res) => {
     }
     if (u.pathname === "/api/rone") return send(res, 200, await rone());
     // 정적 파일 (config.json·server.js 등 민감 파일 제외)
-    let p = decodeURIComponent(u.pathname); if (p === "/") p = "/index.html";
+    let p = decodeURIComponent(u.pathname); if (p === "/") p = "/한아름부동산 index.html";
     const f = path.join(ROOT, p);
-    const allowed = ["/index.html"].includes(p) || p.startsWith("/public/");
+    const allowed = ["/한아름부동산 index.html"].includes(p) || p.startsWith("/public/");
     if (!allowed || !f.startsWith(ROOT) || !fs.existsSync(f)) return send(res, 404, "Not found", "text/plain");
     send(res, 200, fs.readFileSync(f), MIME[path.extname(f)] || "application/octet-stream");
   } catch (e) {

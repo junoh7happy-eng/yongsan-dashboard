@@ -177,7 +177,9 @@ footer{margin-top:32px;font-size:12.5px;color:var(--sub);border-top:1px solid va
   <div class="card"><b>최고가 거래 TOP5 (매매)</b><div class="scroll"><table id="topDeals"></table></div></div>
   <div class="card"><b>면적대별 거래량 · 평균 평당가 (매매)</b><div id="areaBands"></div></div>
   <div class="card" id="reb"><b>한국부동산원 가격지수 (R-ONE)</b><div id="rebBody" class="note" style="margin-top:8px">불러오는 중…</div></div>
-  <div class="card"><b>미분양 현황</b><div class="note" style="margin-top:8px">국토교통부 통계누리의 미분양 통계는 구 단위가 아닌 시·도 단위로 공개되어 이 대시보드에서는 연동하지 않았습니다. <span class="tag todo">별도 연동 필요</span></div></div>
+  <div class="card"><b>미분양 현황 (용산구 · 월)</b><div id="unsoldBody" class="note" style="margin-top:8px">불러오는 중…</div></div>
+  <div class="card"><b>아파트 매매 거래량 (한국부동산원 · 월)</b><div id="volBody" class="note" style="margin-top:8px">불러오는 중…</div></div>
+  <div class="card"><b>매매·전세 수급동향 (서울 도심권, 용산 포함)</b><div id="demandBody" class="note" style="margin-top:8px">불러오는 중…</div></div>
 </div>
 
 <h2>용산구 아파트 TOP10 <small>단지를 클릭하면 지도에 위치와 최근 실거래가가 표시됩니다</small></h2>
@@ -243,7 +245,12 @@ const SAMPLES = [
   { id: "s3", sample: true, apt: "한남더힐", dong: "한남동", type: "wolse", area: 233, price: "30000/1000", memo: "고급 임대 (샘플)" },
   { id: "s4", sample: true, apt: "이촌코오롱", dong: "이촌동", type: "trade", area: 59.82, price: "160000", memo: "소형 실거주 (샘플)" },
   { id: "s5", sample: true, apt: "현대한강", dong: "이촌동", type: "trade", area: 84.9, price: "250000", memo: "한강변 이촌동 (샘플)" },
-  { id: "s6", sample: true, apt: "동아그린", dong: "이촌동", type: "wolse", area: 84.82, price: "20000/300", memo: "이촌역 인근 (샘플)" }
+  { id: "s6", sample: true, apt: "동아그린", dong: "이촌동", type: "wolse", area: 84.82, price: "20000/300", memo: "이촌역 인근 (샘플)" },
+  { id: "s7", sample: true, apt: "대림", dong: "이촌동", type: "trade", area: 84.9, price: "200000", memo: "이촌동 대림 (샘플)" },
+  { id: "s8", sample: true, apt: "한가람", dong: "이촌동", type: "jeonse", area: 59.88, price: "78000", memo: "이촌역 도보권 (샘플)" },
+  { id: "s9", sample: true, apt: "LG한강자이", dong: "이촌동", type: "trade", area: 84.9, price: "280000", memo: "한강변 (샘플)" },
+  { id: "s10", sample: true, apt: "강촌", dong: "이촌동", type: "wolse", area: 84.9, price: "10000/250", memo: "한강공원 인접 (샘플)" },
+  { id: "s11", sample: true, apt: "동부센트레빌", dong: "이촌동", type: "jeonse", area: 84.9, price: "90000", memo: "신축급 (샘플)" }
 ];
 let LIST = [];
 try { LIST = JSON.parse(localStorage.getItem("ys_listings") || "null") || SAMPLES.slice(); } catch { LIST = SAMPLES.slice(); }
@@ -352,6 +359,7 @@ function renderKpis() {
     k("최고 매매가", top ? won(top.price) : "-", top ? `${esc(top.apt)} ${top.area}㎡` : "") +
     k("전세 평균 보증금", j.length ? won(avg(j.map(d => d.deposit))) : "-", `전세 ${j.length.toLocaleString()}건`) +
     k("월세 평균", w.length ? `${won(avg(w.map(d => d.deposit)))} / ${Math.round(avg(w.map(d => d.monthly)))}만` : "-", `월세 ${w.length.toLocaleString()}건 (보증금/월세)`) +
+    k("전세가율 (실거래 기준)", (t.length && j.length) ? Math.round(avg(j.map(d => d.deposit / d.area)) / avg(t.map(d => d.price / d.area)) * 100) + "%" : "-", "평균 전세 보증금÷평균 매매가 (㎡당)") +
     k("월세 비중", (j.length + w.length) ? Math.round(w.length / (j.length + w.length) * 100) + "%" : "-", "전월세 거래 중");
 }
 function renderExtras() {
@@ -379,7 +387,23 @@ async function loadRone() {
     $("rebBody").innerHTML = `<div class="note">${esc(r.name)} 아파트 주간 가격지수 · 기준일 ${esc(tr[tr.length - 1].t)}</div>
       <svg viewBox="0 0 ${W} ${H}" style="width:100%"><polyline fill="none" stroke="var(--trade)" stroke-width="2" points="${pts(tr)}"/><polyline fill="none" stroke="var(--jeonse)" stroke-width="2" points="${pts(je)}"/><text x="${P}" y="${H - 4}">${esc(tr[0].t)}</text><text x="${W - P}" y="${H - 4}" text-anchor="end">${esc(tr[tr.length - 1].t)}</text></svg>
       <table><tr><th></th><th class="n">지수</th><th class="n">전주</th><th class="n">4주</th><th class="n">1년</th></tr>${stat("매매", r.trade, "var(--trade)")}${stat("전세", r.jeonse, "var(--jeonse)")}</table>`;
-  } catch (e) { $("rebBody").textContent = "불러오지 못했습니다."; }
+    fillRone(r);
+  } catch (e) { ["rebBody", "unsoldBody", "volBody", "demandBody"].forEach(i => $(i).textContent = "불러오지 못했습니다. (서버가 켜져 있는지 확인하세요)"); }
+}
+const shortM = k => k.slice(2, 4) + "." + k.slice(4, 6);
+const shortW = t => t.slice(5).replace("-", "/");
+function fillRone(r) {
+  const ml = a => a.map(x => ({ label: shortM(x.k), v: x.v }));
+  const u = r.unsold || {}, uy = u.yongsan || [], us = u.seoul || [];
+  $("unsoldBody").innerHTML = uy.length ? `<div style="font-size:24px;font-weight:700;color:var(--ink)">${uy[uy.length - 1].v.toLocaleString()}호</div><div class="note">${esc(uy[uy.length - 1].t)} 기준${us.length ? " · 서울 전체 " + us[us.length - 1].v.toLocaleString() + "호" : ""}</div>` + chartSvg(ml(uy.slice(-12)), "bar", "var(--wolse)", v => v) : "자료 없음";
+  const v = r.volume || [];
+  $("volBody").innerHTML = v.length ? `<div style="font-size:24px;font-weight:700;color:var(--ink)">${v[v.length - 1].v.toLocaleString()}건</div><div class="note">${esc(v[v.length - 1].t)} · 전월 ${v.length > 1 ? v[v.length - 2].v.toLocaleString() + "건" : "-"} (신고일 기준, 한국부동산원)</div>` + chartSvg(ml(v.slice(-12)), "bar", "var(--trade)", x => x) : "자료 없음";
+  const d = r.demand || {}, dt = d.trade || [], dj = d.jeonse || [];
+  const last = a => a.length ? a[a.length - 1].v.toFixed(1) : "-";
+  $("demandBody").innerHTML = dt.length ? `<div class="note">기준 ${esc(dt[dt.length - 1].t)} · 100 초과=매수·전세 수요가 많음, 미만=적음</div>
+    <table><tr><th></th><th class="n">도심권</th><th class="n">서울 전체</th></tr>
+    <tr><td>매매수급지수</td><td class="n"><b>${last(dt)}</b></td><td class="n">${last(d.tradeSeoul || [])}</td></tr>
+    <tr><td>전세수급지수</td><td class="n"><b>${last(dj)}</b></td><td class="n">${last(d.jeonseSeoul || [])}</td></tr></table>` + chartSvg(dt.slice(-26).map(x => ({ label: shortW(x.t), v: x.v })), "line", "var(--trade)", x => x.toFixed(0)) + `<div class="cap">매매수급지수(도심권) 최근 26주</div>` : "자료 없음";
 }
 
 /* ---------- TOP10 ---------- */
@@ -615,6 +639,10 @@ $("apply").onclick = () => {
   $("rank").classList.add("sec-all"); })();
 S.to = ymd(new Date()); S.from = addDays(S.to, -90);
 $("from").value = S.from; $("to").value = S.to;
+if (location.protocol === "file:") {
+  fetch("http://localhost:8080/api/rone").then(r => { if (r.ok) location.replace("http://localhost:8080/"); }).catch(() => {});
+  $("msg").innerHTML = `<div class="err">파일을 직접 열어서 데이터를 불러오지 못합니다. <b>start.bat</b> 을 실행한 뒤 <b>http://localhost:8080</b> 으로 접속하세요.</div>`;
+}
 initMap(); renderListings(); loadRone(); load();
 </script>
 </body>
