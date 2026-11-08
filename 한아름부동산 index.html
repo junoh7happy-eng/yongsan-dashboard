@@ -640,8 +640,9 @@ $("apply").onclick = () => {
 S.to = ymd(new Date()); S.from = addDays(S.to, -90);
 $("from").value = S.from; $("to").value = S.to;
 if (location.protocol === "file:") {
-  fetch("http://localhost:8080/api/rone").then(r => { if (r.ok) location.replace("http://localhost:8080/"); }).catch(() => {});
-  $("msg").innerHTML = `<div class="err">파일을 직접 열어서 데이터를 불러오지 못합니다. <b>start.bat</b> 을 실행한 뒤 <b>http://localhost:8080</b> 으로 접속하세요.</div>`;
+  // 파일로 직접 열었을 때: 서버가 켜져 있으면 자동 이동(no-cors 요청은 응답을 못 읽어도 연결 여부는 알 수 있음)
+  fetch("http://localhost:8080/", { mode: "no-cors" }).then(() => location.replace("http://localhost:8080/")).catch(() => {});
+  $("msg").innerHTML = `<div class="err">이 파일을 직접 열면 데이터를 불러올 수 없습니다. <b>start.bat</b> 을 실행한 뒤 <a href="http://localhost:8080"><b>http://localhost:8080</b></a> 으로 접속하세요. (서버가 이미 켜져 있으면 자동으로 이동합니다)</div>`;
 }
 initMap(); renderListings(); loadRone(); load();
 </script>
