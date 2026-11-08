@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: yongsan-dashboard
+    runtime: node
+    plan: free
+    buildCommand: echo "no build"
+    startCommand: node server.js
+    envVars:
+      - key: DATA_GO_KR_KEY
+        sync: false
+      - key: RONE_KEY
+        sync: false

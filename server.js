@@ -5,7 +5,14 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = __dirname;
-const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, "config.json"), "utf8"));
+// 설정: config.json(로컬) 또는 환경변수(배포용: DATA_GO_KR_KEY, RONE_KEY, PORT)
+let cfg = {};
+try { cfg = JSON.parse(fs.readFileSync(path.join(ROOT, "config.json"), "utf8")); } catch { /* 배포 환경: 환경변수 사용 */ }
+cfg.port = Number(process.env.PORT) || cfg.port || 8080;
+cfg.dataGoKrKey = process.env.DATA_GO_KR_KEY || cfg.dataGoKrKey;
+cfg.rone = { clsId: 50045, clsName: "용산구", tradeStatblId: "T244183132827305", jeonseStatblId: "T247713133046872", ...(cfg.rone || {}) };
+if (process.env.RONE_KEY) cfg.rone.key = process.env.RONE_KEY;
+if (!cfg.dataGoKrKey) { console.error("공공데이터포털 키가 없습니다. config.json 또는 환경변수 DATA_GO_KR_KEY 를 설정하세요."); process.exit(1); }
 const KEY = cfg.dataGoKrKey;
 const LAWD = "11170"; // 서울 용산구
 const UA = "hanaruem-yongsan-dashboard/1.0";
@@ -221,8 +228,17 @@ const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; cha
 const send = (res, code, body, type = "application/json; charset=utf-8") => { res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store" }); res.end(typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
 
+// 간단한 IP별 요청 제한 (공개 배포 시 키·외부 서비스 남용 방지): /api, /tile 분당 240회
+const hits = new Map();
+setInterval(() => hits.clear(), 60e3).unref();
+function limited(req) {
+  const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  const n = (hits.get(ip) || 0) + 1; hits.set(ip, n);
+  return n > 240;
+}
 http.createServer(async (req, res) => {
   const u = new URL(req.url, "http://x");
+  if ((u.pathname.startsWith("/api/") || u.pathname.startsWith("/tile/")) && limited(req)) return send(res, 429, { error: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." });
   try {
     if (u.pathname === "/api/deals") {
       const type = u.searchParams.get("type"), from = u.searchParams.get("from"), to = u.searchParams.get("to");
@@ -256,4 +272,4 @@ http.createServer(async (req, res) => {
   } catch (e) {
     send(res, 502, { error: String(e.message || e) });
   }
-}).listen(cfg.port, () => console.log(`용산구 대시보드: http://localhost:${cfg.port}`));
+}).listen(cfg.port, "0.0.0.0", () => console.log(`용산구 대시보드 실행 중 (포트 ${cfg.port})`));
